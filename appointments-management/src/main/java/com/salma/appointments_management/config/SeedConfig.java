@@ -52,7 +52,20 @@ public class SeedConfig {
             slot.setUpdatedAt(Instant.now());
             slot = slotRepository.save(slot);
 
-            LOGGER.info("Seeded slot with patient {} and slot  {}",patient.getId(), slot.getId());
+            // Slot 2: now + 1 hour, 30 min duration
+            Instant start1 = Instant.now().plus(1, ChronoUnit.HOURS);
+            Instant end1 = start.plus(30, ChronoUnit.MINUTES);
+
+            Slot slot1 = new Slot();
+            slot1.setCreatedAt(Instant.now());
+            slot1.setDoctor(doctor);
+            slot1.setStatus("AVAILABLE");
+            slot1.setStartAt(start);
+            slot1.setEndAt(end);
+            slot1.setUpdatedAt(Instant.now());
+            slot1 = slotRepository.save(slot1);
+
+            LOGGER.info("Seeded slot with patient {} and slot  {} ans slot 1 {} ",patient.getId(), slot.getId(),slot1.getId());
         };
     }
 }

@@ -38,6 +38,7 @@ public class Booking {
     private String status;
     @Column(name = "idempotency_key", nullable=false, length = 100)
     private String idempotencyKey;
+    private String lastOperationKey;
     private Instant createdAt;
     private Instant updatedAt;
 
@@ -95,5 +96,13 @@ public class Booking {
 
     public void setUpdatedAt(Instant updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public String getLastOperationKey() {
+        return lastOperationKey;
+    }
+
+    public void setLastOperationKey(String lastOperationKey) {
+        this.lastOperationKey = lastOperationKey;
     }
 }
