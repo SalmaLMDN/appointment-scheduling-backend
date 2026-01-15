@@ -3,6 +3,7 @@ package com.salma.appointments_management.booking;
 
 import com.salma.appointments_management.booking.dto.BookingRequest;
 import com.salma.appointments_management.booking.dto.BookingResponse;
+import com.salma.appointments_management.booking.dto.CancelBookingRequest;
 import com.salma.appointments_management.booking.dto.RescheduleBookingRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -34,6 +35,13 @@ public class BookingController {
     @PostMapping("/{bookingId}/reschedule")
     public ResponseEntity<BookingResponse> rescheduleBooking(@PathVariable UUID bookingId, @Valid @RequestBody RescheduleBookingRequest rescheduleBookingRequest) {
         Booking booking = bookingService.rescheduleSlot(bookingId, rescheduleBookingRequest.getNewSlotId(),rescheduleBookingRequest.getIdempotencyKey());
+        BookingResponse bookingResponse = bookingMapper.toResponse(booking);
+        return ResponseEntity.ok(bookingResponse);
+    }
+
+    @PostMapping("/{bookingId}/cancel")
+    public ResponseEntity<BookingResponse> cancelBooking(@PathVariable UUID bookingId, @Valid @RequestBody CancelBookingRequest cancelBookingRequest) {
+        Booking booking =  bookingService.cancelSlot(bookingId, cancelBookingRequest.getIdempotencyKey());
         BookingResponse bookingResponse = bookingMapper.toResponse(booking);
         return ResponseEntity.ok(bookingResponse);
     }

@@ -76,4 +76,23 @@ public class BookingService {
         return bookingRepository.save(booking);
 
     }
+
+    @Transactional
+    public Booking cancelSlot(UUID bookingId, String idempotencyKey) {
+        Booking booking = bookingRepository.findByIdForUpdate(bookingId)
+                .orElseThrow(() -> new IllegalArgumentException("Booking not found"));
+        if(booking.getStatus().equals("CANCELLED") && idempotencyKey.equals(booking.getLastOperationKey())) return booking;
+        if(!booking.getStatus().equals("CONFIRMED")) { throw new IllegalStateException("Booking is not confirmed"); }
+
+        Slot slot = slotRepository.findByIdForUpdate(booking.getSlot().getId())
+                .orElseThrow(() -> new IllegalArgumentException("Slot not found"));
+        slot.setStatus("AVAILABLE");
+        slot.setUpdatedAt(Instant.now());
+        slotRepository.save(slot);
+        booking.setStatus("CANCELLED");
+        booking.setUpdatedAt(Instant.now());
+        booking.setLastOperationKey(idempotencyKey);
+        return bookingRepository.save(booking);
+
+    }
 }
