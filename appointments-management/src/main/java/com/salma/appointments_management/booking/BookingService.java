@@ -1,27 +1,45 @@
 package com.salma.appointments_management.booking;
 
 
+import com.salma.appointments_management.enums.OutboxStatus;
+import com.salma.appointments_management.events.BookingCancelledEvent;
+import com.salma.appointments_management.events.BookingConfirmedEvent;
+import com.salma.appointments_management.events.BookingRescheduleEvent;
+import com.salma.appointments_management.outbox.OutboxEvent;
+import com.salma.appointments_management.outbox.OutboxEventRepository;
 import com.salma.appointments_management.patient.PatientRepository;
 import com.salma.appointments_management.slot.Slot;
 import com.salma.appointments_management.slot.SlotRepository;
 import jakarta.transaction.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
 @Service
+
 public class BookingService {
     private final BookingRepository bookingRepository;
     private final SlotRepository slotRepository;
     private final PatientRepository patientRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
+    private final OutboxEventRepository outboxEventRepository;
+    private final ObjectMapper objectMapper;
 
 
-    public BookingService(BookingRepository bookingRepository, SlotRepository slotRepository, PatientRepository patientRepository) {
+
+    public BookingService(BookingRepository bookingRepository, SlotRepository slotRepository, PatientRepository patientRepository, ApplicationEventPublisher applicationEventPublisher,
+                            OutboxEventRepository outboxEventRepository, ObjectMapper objectMapper) {
         this.bookingRepository = bookingRepository;
         this.slotRepository = slotRepository;
         this.patientRepository = patientRepository;
+        this.applicationEventPublisher = applicationEventPublisher;
+        this.outboxEventRepository = outboxEventRepository;
+        this.objectMapper = objectMapper;
     }
 
     @Transactional
@@ -48,7 +66,15 @@ public class BookingService {
         booking.setPatient(patientRepository.getById(patientId));
         booking.setCreatedAt(Instant.now());
         booking.setUpdatedAt(Instant.now());
-        return bookingRepository.save(booking);
+        Booking saved = bookingRepository.save(booking);
+        outboxEventRepository.save(newOutboxEvent("BOOKING_CONFIRMED",saved));
+        applicationEventPublisher.publishEvent(new BookingConfirmedEvent(
+                saved.getId(),
+                saved.getPatient().getId(),
+                saved.getSlot().getId(),
+                Instant.now()
+        ));
+        return saved;
 
     }
 
@@ -73,7 +99,14 @@ public class BookingService {
         booking.setStatus("CONFIRMED");
         booking.setUpdatedAt(Instant.now());
         booking.setLastOperationKey(idempotencyKey);
-        return bookingRepository.save(booking);
+        Booking saved =  bookingRepository.save(booking);
+        applicationEventPublisher.publishEvent(new BookingRescheduleEvent(
+                saved.getId(),
+                saved.getPatient().getId(),
+                saved.getSlot().getId(),
+                Instant.now()
+        ));
+        return saved;
 
     }
 
@@ -92,7 +125,47 @@ public class BookingService {
         booking.setStatus("CANCELLED");
         booking.setUpdatedAt(Instant.now());
         booking.setLastOperationKey(idempotencyKey);
-        return bookingRepository.save(booking);
+        Booking saved = bookingRepository.save(booking);
+        outboxEventRepository.save(newOutboxEvent("BOOKING_CANCELLED",saved));
+        applicationEventPublisher.publishEvent(new BookingCancelledEvent(
+                saved.getId(),
+                saved.getPatient().getId(),
+                saved.getSlot().getId(),
+                Instant.now()
+        ));
+        return saved;
+    }
 
+    // Helper method
+    private OutboxEvent newOutboxEvent(String eventType, Booking booking) {
+        OutboxEvent outboxEvent = new OutboxEvent();
+
+        UUID eventId = UUID.randomUUID();
+        outboxEvent.setId(eventId);
+
+        outboxEvent.setEventType(eventType);
+        outboxEvent.setAggregateId(booking.getId());
+        outboxEvent.setAggregateType("BOOKING");
+        outboxEvent.setCreatedAt(Instant.now());
+
+        outboxEvent.setStatus(OutboxStatus.NEW);
+        outboxEvent.setAttempts(0);
+
+        // minimal payload as JSON
+        try{
+            String payload = objectMapper.writeValueAsString(
+                    Map.of(
+                            "eventId", eventId.toString(),
+                            "bookingId", booking.getId().toString(),
+                            "patientId", booking.getPatient().getId().toString(),
+                            "slotId", booking.getSlot().getId().toString(),
+                            "occuredAt", Instant.now().toString()
+                    )
+            );
+            outboxEvent.setPayload(payload);
+        } catch(Exception e) {
+            throw new IllegalStateException("Failed to serialize outbox payload", e);
+        }
+        return outboxEvent;
     }
 }
